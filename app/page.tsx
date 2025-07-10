@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Calculator,
   TrendingUp,
@@ -113,6 +113,12 @@ interface ChatGroup {
 }
 
 export default function CompoundInterestClub() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [loggedInUser, setLoggedInUser] = useState("")
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
   const [activeSection, setActiveSection] = useState("calculadora")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [capital, setCapital] = useState(10)
@@ -122,9 +128,6 @@ export default function CompoundInterestClub() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loginMessage, setLoginMessage] = useState("")
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [loggedInUser, setLoggedInUser] = useState("")
-  const [isAdmin, setIsAdmin] = useState(false)
   const [currentQuote, setCurrentQuote] = useState("")
   const [quoteIndex, setQuoteIndex] = useState(0)
   const [overallProgress, setOverallProgress] = useState(0)
@@ -134,7 +137,6 @@ export default function CompoundInterestClub() {
   const [businessIdeas, setBusinessIdeas] = useState<string[]>(defaultBusinessIdeas)
   const [motivationalQuotes, setMotivationalQuotes] = useState<string[]>(defaultMotivationalQuotes)
   const [appUsers, setAppUsers] = useState<AppUser[]>([])
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   // Admin form states
   const [newIdeaText, setNewIdeaText] = useState("")
@@ -184,6 +186,16 @@ export default function CompoundInterestClub() {
 
   // Initialize data in localStorage
   useEffect(() => {
+    // Verificar si hay sesión guardada
+    const savedUser = localStorage.getItem("currentUser")
+    if (savedUser) {
+      const userData = JSON.parse(savedUser)
+      setIsLoggedIn(true)
+      setLoggedInUser(userData.username)
+      setIsAdmin(userData.isAdmin)
+      setIsSuperAdmin(userData.isSuperAdmin)
+    }
+
     // Initialize default admin user
     const defaultUsers: AppUser[] = [
       {
@@ -191,18 +203,24 @@ export default function CompoundInterestClub() {
         password: "superder!!2",
         isAdmin: true,
         createdAt: new Date(),
+        lastLogin: undefined,
+        currentGroup: undefined,
       },
       {
         username: "jose",
         password: "clave1",
         isAdmin: false,
         createdAt: new Date(),
+        lastLogin: undefined,
+        currentGroup: undefined,
       },
       {
         username: "maria",
         password: "clave2",
         isAdmin: false,
         createdAt: new Date(),
+        lastLogin: undefined,
+        currentGroup: undefined,
       },
     ]
 
@@ -272,6 +290,10 @@ export default function CompoundInterestClub() {
       setCurrentGroup("general")
       localStorage.setItem("chatGroups", JSON.stringify([defaultGroup]))
     }
+
+    setTimeout(() => {
+      setIsLoading(false)
+    }, 1000)
   }, [])
 
   // Auto-scroll chat to bottom
@@ -441,6 +463,8 @@ export default function CompoundInterestClub() {
       password: registerPassword,
       isAdmin: false,
       createdAt: new Date(),
+      lastLogin: undefined,
+      currentGroup: undefined,
     }
 
     const updatedUsers = [...appUsers, newUser]
@@ -457,11 +481,11 @@ export default function CompoundInterestClub() {
     setTimeout(() => {
       setUsername(newUser.username)
       setPassword(newUser.password)
-      handleLogin()
+      handleLoginFormSubmit()
     }, 1000)
   }
 
-  const handleLogin = () => {
+  const handleLoginFormSubmit = () => {
     const user = appUsers.find((u) => u.username === username && u.password === password)
 
     if (user) {
@@ -472,6 +496,16 @@ export default function CompoundInterestClub() {
       setIsSuperAdmin(user.username === "admin" && user.password === "superder!!2")
       loadProgress(username)
       setActiveSection("calculadora")
+
+      // Guardar sesión
+      localStorage.setItem(
+        "currentUser",
+        JSON.stringify({
+          username: user.username,
+          isAdmin: user.isAdmin,
+          isSuperAdmin: user.username === "admin" && user.password === "superder!!2",
+        }),
+      )
 
       // Update last login
       const updatedUsers = appUsers.map((u) => (u.username === username ? { ...u, lastLogin: new Date() } : u))
@@ -513,15 +547,17 @@ export default function CompoundInterestClub() {
   }
 
   const handleLogout = () => {
+    setIsLoggedIn(false)
+    setLoggedInUser("")
+    setIsAdmin(false)
+    setIsSuperAdmin(false)
+    localStorage.removeItem("currentUser")
+
     const currentOnline = JSON.parse(localStorage.getItem("onlineUsers") || "[]")
     const updatedOnline = currentOnline.filter((user: string) => user !== loggedInUser)
     setOnlineUsers(updatedOnline)
     localStorage.setItem("onlineUsers", JSON.stringify(updatedOnline))
 
-    setIsLoggedIn(false)
-    setLoggedInUser("")
-    setIsAdmin(false)
-    setIsSuperAdmin(false)
     setUsername("")
     setPassword("")
     setLoginMessage("")
@@ -722,6 +758,8 @@ export default function CompoundInterestClub() {
         password: newUserPassword.trim(),
         isAdmin: newUserIsAdmin,
         createdAt: new Date(),
+        lastLogin: undefined,
+        currentGroup: undefined,
       }
       const updatedUsers = [...appUsers, newUser]
       setAppUsers(updatedUsers)
@@ -739,11 +777,6 @@ export default function CompoundInterestClub() {
       setAppUsers(updatedUsers)
       localStorage.setItem("appUsers", JSON.stringify(updatedUsers))
     }
-  }
-
-  const clearChat = () => {
-    setChatMessages([])
-    localStorage.setItem("chatMessages", JSON.stringify([]))
   }
 
   // User ideas functions
@@ -831,35 +864,247 @@ export default function CompoundInterestClub() {
     { id: "login", label: "Usuario", icon: User },
   ]
 
+  // Loading Screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <TrendingUp className="h-8 w-8 text-black" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">Club de Interés Compuesto</h1>
+          <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+        </div>
+      </div>
+    )
+  }
+
+  // Login Screen
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+              <TrendingUp className="h-8 w-8 text-black" />
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-2">Club de Interés Compuesto</h1>
+            <p className="text-gray-400">Tu camino hacia la libertad financiera</p>
+          </div>
+
+          <Card className="bg-gray-900 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-white text-center">
+                {showRegister ? "Crear Cuenta" : "Iniciar Sesión"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!showRegister ? (
+                <>
+                  {/* Login Form */}
+                  <div>
+                    <Label htmlFor="username" className="text-gray-300">
+                      Usuario
+                    </Label>
+                    <Input
+                      id="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="Ingresa tu usuario"
+                      className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password" className="text-gray-300">
+                      Contraseña
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Ingresa tu contraseña"
+                        className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-400" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleLoginFormSubmit}
+                    className="w-full bg-white text-black hover:bg-gray-200 touch-target"
+                  >
+                    Entrar
+                  </Button>
+                  <div className="text-center">
+                    <p className="text-gray-400 text-sm mb-2">¿No tienes cuenta?</p>
+                    <Button
+                      onClick={() => setShowRegister(true)}
+                      variant="outline"
+                      className="w-full border-gray-600 text-gray-300 hover:bg-gray-800 touch-target"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Crear Cuenta Nueva
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Register Form */}
+                  <div>
+                    <Label htmlFor="registerUsername" className="text-gray-300">
+                      Nombre de Usuario
+                    </Label>
+                    <Input
+                      id="registerUsername"
+                      type="text"
+                      value={registerUsername}
+                      onChange={(e) => setRegisterUsername(e.target.value)}
+                      placeholder="Elige tu nombre de usuario"
+                      className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="registerPassword" className="text-gray-300">
+                      Contraseña
+                    </Label>
+                    <Input
+                      id="registerPassword"
+                      type="password"
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      placeholder="Crea una contraseña"
+                      className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="confirmPassword" className="text-gray-300">
+                      Confirmar Contraseña
+                    </Label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirma tu contraseña"
+                      className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleRegister}
+                    className="w-full bg-white text-black hover:bg-gray-200 touch-target"
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Crear Mi Cuenta
+                  </Button>
+                  <div className="text-center">
+                    <Button
+                      onClick={() => setShowRegister(false)}
+                      variant="link"
+                      className="text-gray-400 hover:text-white"
+                    >
+                      ← Volver al Login
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {/* Messages */}
+              {(loginMessage || registerMessage) && (
+                <Alert
+                  className={
+                    loginMessage.includes("Bienvenido") || registerMessage.includes("exitosamente")
+                      ? "border-green-600 bg-green-900/20"
+                      : "border-red-600 bg-red-900/20"
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    {loginMessage.includes("Bienvenido") || registerMessage.includes("exitosamente") ? (
+                      <CheckCircle className="h-4 w-4 text-green-400" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-400" />
+                    )}
+                    <AlertDescription
+                      className={
+                        loginMessage.includes("Bienvenido") || registerMessage.includes("exitosamente")
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }
+                    >
+                      {loginMessage || registerMessage}
+                    </AlertDescription>
+                  </div>
+                </Alert>
+              )}
+
+              {/* Demo Users */}
+              {!showRegister && (
+                <div className="text-center text-xs text-gray-500 mt-4 p-3 bg-gray-800 rounded-lg border border-gray-700">
+                  <p className="font-bold mb-2 text-gray-300">👥 Usuarios de prueba:</p>
+                  <div className="space-y-1">
+                    <p>
+                      👑 <code className="bg-gray-700 px-2 py-1 rounded">admin</code> /{" "}
+                      <code className="bg-gray-700 px-2 py-1 rounded">superder!!2</code>
+                    </p>
+                    <p>
+                      👤 <code className="bg-gray-700 px-2 py-1 rounded">jose</code> /{" "}
+                      <code className="bg-gray-700 px-2 py-1 rounded">clave2</code>
+                    </p>
+                    <p>
+                      👤 <code className="bg-gray-700 px-2 py-1 rounded">maria</code> /{" "}
+                      <code className="bg-gray-700 px-2 py-1 rounded">clave2</code>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 via-slate-200 to-gray-300 flex">
+    <div className="min-h-screen bg-black flex">
       {/* Mobile menu button */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <Button
           variant="outline"
           size="icon"
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="bg-white shadow-lg border-2 border-gray-400 hover:border-blue-600 touch-target"
+          className="bg-gray-900 border-gray-700 hover:border-white touch-target"
         >
-          {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          {sidebarOpen ? <X className="h-4 w-4 text-white" /> : <Menu className="h-4 w-4 text-white" />}
         </Button>
       </div>
 
       {/* Sidebar */}
       <aside
         className={`
-        fixed lg:static inset-y-0 left-0 z-40 w-72 lg:w-64 bg-gradient-to-b from-black via-gray-900 to-slate-800 text-white transform transition-transform duration-300 ease-in-out shadow-2xl
+        fixed lg:static inset-y-0 left-0 z-40 w-72 lg:w-64 bg-gray-900 text-white transform transition-transform duration-300 ease-in-out shadow-2xl border-r border-gray-700
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}
       >
         <div className="p-4 lg:p-6 safe-area-inset">
           <div className="flex items-center gap-2 mb-6 lg:mb-8">
-            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-blue-600 to-blue-800 rounded-full flex items-center justify-center">
-              <TrendingUp className="h-4 w-4 lg:h-6 lg:w-6 text-white" />
+            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-white rounded-full flex items-center justify-center">
+              <TrendingUp className="h-4 w-4 lg:h-6 lg:w-6 text-black" />
             </div>
-            <h2 className="text-base lg:text-lg font-bold bg-gradient-to-r from-blue-400 to-blue-300 bg-clip-text text-transparent">
-              Club Interés
-            </h2>
+            <h2 className="text-base lg:text-lg font-bold text-white">Club Interés</h2>
           </div>
 
           <nav className="space-y-2">
@@ -873,10 +1118,10 @@ export default function CompoundInterestClub() {
                     setSidebarOpen(false)
                   }}
                   className={`
-                    w-full flex items-center gap-3 px-3 py-3 lg:px-4 lg:py-3 rounded-xl text-left transition-all duration-200 transform hover:scale-105 touch-target text-sm lg:text-base
+                    w-full flex items-center gap-3 px-3 py-3 lg:px-4 lg:py-3 rounded-xl text-left transition-all duration-200 touch-target text-sm lg:text-base
                     ${
                       activeSection === item.id
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-white text-black shadow-lg"
                         : "text-gray-300 hover:bg-gray-800 hover:text-white"
                     }
                   `}
@@ -885,7 +1130,7 @@ export default function CompoundInterestClub() {
                   {item.label}
                   {item.id === "admin" && <Crown className="h-3 w-3 lg:h-4 lg:w-4 ml-auto text-yellow-400" />}
                   {item.id === "chat" && currentGroupOnlineUsers.length > 0 && (
-                    <span className="ml-auto bg-blue-500 text-xs px-2 py-1 rounded-full text-white font-bold">
+                    <span className="ml-auto bg-white text-black text-xs px-2 py-1 rounded-full font-bold">
                       {currentGroupOnlineUsers.length}
                     </span>
                   )}
@@ -897,24 +1142,16 @@ export default function CompoundInterestClub() {
           {isLoggedIn && (
             <div className="mt-6 lg:mt-8 pt-4 lg:pt-6 border-t border-gray-700">
               <div className="text-xs lg:text-sm text-gray-400 mb-2">Sesión activa:</div>
-              <div className="font-semibold text-white mb-1 bg-gradient-to-r from-blue-400 to-blue-400 bg-clip-text text-transparent flex items-center gap-2 text-sm lg:text-base">
+              <div className="font-semibold text-white mb-1 flex items-center gap-2 text-sm lg:text-base">
                 {loggedInUser}
                 {isSuperAdmin && <Crown className="h-3 w-3 lg:h-4 lg:w-4 text-yellow-400" />}
               </div>
-              {isSuperAdmin && (
-                <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white mb-3 text-xs">
-                  SUPER ADMIN
-                </Badge>
-              )}
-              {isAdmin && !isSuperAdmin && (
-                <Badge variant="secondary" className="mb-3 text-xs">
-                  Administrador
-                </Badge>
-              )}
+              {isSuperAdmin && <Badge className="bg-yellow-500 text-black mb-3 text-xs">SUPER ADMIN</Badge>}
+              {isAdmin && !isSuperAdmin && <Badge className="bg-gray-700 text-white mb-3 text-xs">Administrador</Badge>}
               {currentGroupData && (
                 <div className="mb-3 p-2 bg-gray-800 rounded-lg">
                   <div className="text-xs text-gray-400">Grupo actual:</div>
-                  <div className="text-sm font-semibold text-blue-300">{currentGroupData.name}</div>
+                  <div className="text-sm font-semibold text-white">{currentGroupData.name}</div>
                   <div className="text-xs text-gray-500">Código: {currentGroupData.code}</div>
                 </div>
               )}
@@ -940,15 +1177,13 @@ export default function CompoundInterestClub() {
       {/* Main Content */}
       <main className="flex-1 lg:ml-0">
         {/* Header */}
-        <header className="bg-gradient-to-r from-black via-gray-900 to-slate-800 text-white shadow-2xl">
+        <header className="bg-gray-900 text-white shadow-2xl border-b border-gray-700">
           <div className="px-4 lg:px-6 py-4 lg:py-6 safe-area-inset">
             <div className="flex items-center justify-center gap-2 lg:gap-3 lg:ml-0 ml-12">
-              <div className="w-8 h-8 lg:w-12 lg:h-12 bg-gradient-to-r from-blue-600 to-blue-800 rounded-full flex items-center justify-center animate-pulse">
-                <TrendingUp className="h-5 w-5 lg:h-8 lg:w-8 text-white" />
+              <div className="w-8 h-8 lg:w-12 lg:h-12 bg-white rounded-full flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 lg:h-8 lg:w-8 text-black" />
               </div>
-              <h1 className="text-lg lg:text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-300 bg-clip-text text-transparent">
-                Club de Interés Compuesto
-              </h1>
+              <h1 className="text-lg lg:text-3xl font-bold text-white">Club de Interés Compuesto</h1>
             </div>
           </div>
         </header>
@@ -957,8 +1192,8 @@ export default function CompoundInterestClub() {
           {/* Calculator Section */}
           {activeSection === "calculadora" && (
             <div className="space-y-4 lg:space-y-6">
-              <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
+              <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                   <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                     <Calculator className="h-4 w-4 lg:h-5 lg:w-5" />
                     Área de Cálculo
@@ -967,7 +1202,7 @@ export default function CompoundInterestClub() {
                 <CardContent className="p-4 lg:p-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                     <div>
-                      <Label htmlFor="capital" className="text-gray-800 font-semibold text-sm lg:text-base">
+                      <Label htmlFor="capital" className="text-gray-300 font-semibold text-sm lg:text-base">
                         Capital inicial ($)
                       </Label>
                       <Input
@@ -976,11 +1211,11 @@ export default function CompoundInterestClub() {
                         value={capital}
                         onChange={(e) => setCapital(Number(e.target.value))}
                         min="1"
-                        className="border-2 border-gray-400 focus:border-blue-600 touch-target"
+                        className="bg-gray-800 border-gray-600 text-white touch-target"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="percentage" className="text-gray-800 font-semibold text-sm lg:text-base">
+                      <Label htmlFor="percentage" className="text-gray-300 font-semibold text-sm lg:text-base">
                         Porcentaje por vuelta (%)
                       </Label>
                       <Input
@@ -989,11 +1224,11 @@ export default function CompoundInterestClub() {
                         value={percentage}
                         onChange={(e) => setPercentage(Number(e.target.value))}
                         min="1"
-                        className="border-2 border-gray-400 focus:border-blue-600 touch-target"
+                        className="bg-gray-800 border-gray-600 text-white touch-target"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="rounds" className="text-gray-800 font-semibold text-sm lg:text-base">
+                      <Label htmlFor="rounds" className="text-gray-300 font-semibold text-sm lg:text-base">
                         Número de vueltas
                       </Label>
                       <Input
@@ -1003,12 +1238,12 @@ export default function CompoundInterestClub() {
                         onChange={(e) => setRounds(Number(e.target.value))}
                         min="1"
                         max="20"
-                        className="border-2 border-gray-400 focus:border-blue-600 touch-target"
+                        className="bg-gray-800 border-gray-600 text-white touch-target"
                       />
                     </div>
                     <Button
                       onClick={calculateInterest}
-                      className="bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
+                      className="bg-white text-black hover:bg-gray-200 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
                     >
                       ✨ Calcular
                     </Button>
@@ -1019,40 +1254,40 @@ export default function CompoundInterestClub() {
               {results.length > 0 && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-gray-50 to-slate-200">
+                    <Card className="border border-gray-700 shadow-xl bg-gray-900">
                       <CardContent className="pt-4 lg:pt-6">
                         <div className="text-center">
-                          <div className="text-xl lg:text-3xl font-bold text-blue-700 mb-2">
+                          <div className="text-xl lg:text-3xl font-bold text-white mb-2">
                             💰 ${totalGoal.toFixed(2)}
                           </div>
-                          <div className="text-xs lg:text-sm text-gray-700 font-semibold">Meta Final</div>
+                          <div className="text-xs lg:text-sm text-gray-400 font-semibold">Meta Final</div>
                         </div>
                       </CardContent>
                     </Card>
-                    <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-slate-50 to-gray-200">
+                    <Card className="border border-gray-700 shadow-xl bg-gray-900">
                       <CardContent className="pt-4 lg:pt-6">
                         <div className="text-center">
-                          <div className="text-xl lg:text-3xl font-bold text-blue-700 mb-2">
+                          <div className="text-xl lg:text-3xl font-bold text-white mb-2">
                             💵 ${totalCurrent.toFixed(2)}
                           </div>
-                          <div className="text-xs lg:text-sm text-gray-700 font-semibold">Total Actual</div>
+                          <div className="text-xs lg:text-sm text-gray-400 font-semibold">Total Actual</div>
                         </div>
                       </CardContent>
                     </Card>
-                    <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-gray-100 to-slate-300">
+                    <Card className="border border-gray-700 shadow-xl bg-gray-900">
                       <CardContent className="pt-4 lg:pt-6">
                         <div className="text-center">
-                          <div className="text-xl lg:text-3xl font-bold text-black mb-2">
+                          <div className="text-xl lg:text-3xl font-bold text-white mb-2">
                             🎯 {completedRounds}/{results.length}
                           </div>
-                          <div className="text-xs lg:text-sm text-gray-700 font-semibold">Vueltas Completadas</div>
+                          <div className="text-xs lg:text-sm text-gray-400 font-semibold">Vueltas Completadas</div>
                         </div>
                       </CardContent>
                     </Card>
                   </div>
 
-                  <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                    <CardHeader className="bg-gradient-to-r from-gray-900 to-black text-white rounded-t-lg">
+                  <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                    <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                       <CardTitle className="text-lg lg:text-xl">🚀 Tabla de Progreso</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 lg:p-6">
@@ -1060,21 +1295,21 @@ export default function CompoundInterestClub() {
                         <div className="min-w-[800px] lg:min-w-0">
                           <table className="w-full border-collapse">
                             <thead>
-                              <tr className="border-b-2 bg-gradient-to-r from-gray-200 to-slate-300">
-                                <th className="p-2 lg:p-4 text-left font-bold text-black text-sm lg:text-base">
+                              <tr className="border-b-2 border-gray-700 bg-gray-800">
+                                <th className="p-2 lg:p-4 text-left font-bold text-white text-sm lg:text-base">
                                   Vuelta
                                 </th>
-                                <th className="p-2 lg:p-4 text-left font-bold text-black text-sm lg:text-base">Meta</th>
-                                <th className="p-2 lg:p-4 text-left font-bold text-black text-sm lg:text-base">
+                                <th className="p-2 lg:p-4 text-left font-bold text-white text-sm lg:text-base">Meta</th>
+                                <th className="p-2 lg:p-4 text-left font-bold text-white text-sm lg:text-base">
                                   Lo que llevo
                                 </th>
-                                <th className="p-2 lg:p-4 text-left font-bold text-black text-sm lg:text-base">
+                                <th className="p-2 lg:p-4 text-left font-bold text-white text-sm lg:text-base">
                                   Me falta
                                 </th>
-                                <th className="p-2 lg:p-4 text-left font-bold text-black text-sm lg:text-base">
+                                <th className="p-2 lg:p-4 text-left font-bold text-white text-sm lg:text-base">
                                   Idea sugerida
                                 </th>
-                                <th className="p-2 lg:p-4 text-center font-bold text-black text-sm lg:text-base">
+                                <th className="p-2 lg:p-4 text-center font-bold text-white text-sm lg:text-base">
                                   ¿Completado?
                                 </th>
                               </tr>
@@ -1083,16 +1318,14 @@ export default function CompoundInterestClub() {
                               {results.map((round, index) => (
                                 <tr
                                   key={round.round}
-                                  className={`border-b-2 hover:bg-gradient-to-r transition-all duration-200 ${
-                                    round.completed
-                                      ? "bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300"
-                                      : "hover:from-gray-100 hover:to-slate-200"
+                                  className={`border-b border-gray-700 hover:bg-gray-800 transition-all duration-200 ${
+                                    round.completed ? "bg-gray-800" : ""
                                   }`}
                                 >
-                                  <td className="p-2 lg:p-4 font-bold text-black text-sm lg:text-base">
+                                  <td className="p-2 lg:p-4 font-bold text-white text-sm lg:text-base">
                                     {round.round}
                                   </td>
-                                  <td className="p-2 lg:p-4 font-bold text-blue-700 text-sm lg:text-base">
+                                  <td className="p-2 lg:p-4 font-bold text-white text-sm lg:text-base">
                                     ${round.goal.toFixed(2)}
                                   </td>
                                   <td className="p-2 lg:p-4">
@@ -1100,22 +1333,22 @@ export default function CompoundInterestClub() {
                                       type="number"
                                       value={round.current || ""}
                                       onChange={(e) => updateCurrent(index, Number(e.target.value) || 0)}
-                                      className="w-20 lg:w-28 border-2 border-gray-400 focus:border-blue-600 touch-target text-sm"
+                                      className="w-20 lg:w-28 bg-gray-800 border-gray-600 text-white touch-target text-sm"
                                       min="0"
                                       disabled={round.completed}
                                     />
                                   </td>
-                                  <td className="p-2 lg:p-4 font-bold text-red-600 text-sm lg:text-base">
+                                  <td className="p-2 lg:p-4 font-bold text-red-400 text-sm lg:text-base">
                                     ${round.missing.toFixed(2)}
                                   </td>
-                                  <td className="p-2 lg:p-4 text-xs lg:text-sm text-gray-800 font-medium">
+                                  <td className="p-2 lg:p-4 text-xs lg:text-sm text-gray-300 font-medium">
                                     {round.idea}
                                   </td>
                                   <td className="p-2 lg:p-4 text-center">
                                     <Checkbox
                                       checked={round.completed}
                                       onCheckedChange={() => toggleCompleted(index)}
-                                      className="w-5 h-5 lg:w-6 lg:h-6 border-2 border-gray-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 touch-target"
+                                      className="w-5 h-5 lg:w-6 lg:h-6 border-2 border-gray-600 data-[state=checked]:bg-white data-[state=checked]:border-white touch-target"
                                     />
                                   </td>
                                 </tr>
@@ -1136,8 +1369,8 @@ export default function CompoundInterestClub() {
             <div className="space-y-4 lg:space-y-6">
               {results.length > 0 ? (
                 <>
-                  <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                    <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
+                  <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                    <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                       <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                         <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5" />🎯 Resumen de tu Plan: {rounds} Vueltas - $
                         {capital} Inicial
@@ -1145,38 +1378,38 @@ export default function CompoundInterestClub() {
                     </CardHeader>
                     <CardContent className="p-4 lg:p-6">
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                        <div className="text-center p-4 lg:p-6 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl shadow-lg border-2 border-blue-400">
-                          <div className="text-xl lg:text-3xl font-bold text-blue-800 mb-2">🏆 {completedRounds}</div>
-                          <div className="text-xs lg:text-sm text-blue-900 font-semibold">Vueltas Completadas</div>
+                        <div className="text-center p-4 lg:p-6 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+                          <div className="text-xl lg:text-3xl font-bold text-white mb-2">🏆 {completedRounds}</div>
+                          <div className="text-xs lg:text-sm text-gray-400 font-semibold">Vueltas Completadas</div>
                         </div>
-                        <div className="text-center p-4 lg:p-6 bg-gradient-to-br from-gray-100 to-slate-300 rounded-xl shadow-lg border-2 border-gray-500">
-                          <div className="text-xl lg:text-3xl font-bold text-gray-800 mb-2">
+                        <div className="text-center p-4 lg:p-6 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+                          <div className="text-xl lg:text-3xl font-bold text-white mb-2">
                             💰 ${totalCurrent.toFixed(2)}
                           </div>
-                          <div className="text-xs lg:text-sm text-gray-900 font-semibold">Total Acumulado</div>
+                          <div className="text-xs lg:text-sm text-gray-400 font-semibold">Total Acumulado</div>
                         </div>
-                        <div className="text-center p-4 lg:p-6 bg-gradient-to-br from-slate-100 to-gray-300 rounded-xl shadow-lg border-2 border-slate-500">
-                          <div className="text-xl lg:text-3xl font-bold text-slate-800 mb-2">
+                        <div className="text-center p-4 lg:p-6 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+                          <div className="text-xl lg:text-3xl font-bold text-white mb-2">
                             🎯 ${totalGoal.toFixed(2)}
                           </div>
-                          <div className="text-xs lg:text-sm text-slate-900 font-semibold">Meta Final</div>
+                          <div className="text-xs lg:text-sm text-gray-400 font-semibold">Meta Final</div>
                         </div>
-                        <div className="text-center p-4 lg:p-6 bg-gradient-to-br from-blue-100 to-blue-300 rounded-xl shadow-lg border-2 border-blue-500">
-                          <div className="text-xl lg:text-3xl font-bold text-blue-800 mb-2">
+                        <div className="text-center p-4 lg:p-6 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+                          <div className="text-xl lg:text-3xl font-bold text-white mb-2">
                             📊 {overallProgress.toFixed(1)}%
                           </div>
-                          <div className="text-xs lg:text-sm text-blue-900 font-semibold">Progreso Total</div>
+                          <div className="text-xs lg:text-sm text-gray-400 font-semibold">Progreso Total</div>
                         </div>
                       </div>
 
                       <div className="mb-4">
-                        <div className="flex justify-between text-sm text-gray-800 mb-2 font-semibold">
+                        <div className="flex justify-between text-sm text-gray-300 mb-2 font-semibold">
                           <span>🚀 Progreso General</span>
                           <span>{overallProgress.toFixed(1)}%</span>
                         </div>
-                        <div className="w-full bg-gray-300 rounded-full h-4 lg:h-6 shadow-inner">
+                        <div className="w-full bg-gray-700 rounded-full h-4 lg:h-6 shadow-inner">
                           <div
-                            className="bg-gradient-to-r from-blue-600 via-blue-700 to-black h-4 lg:h-6 rounded-full transition-all duration-1000 ease-out shadow-lg"
+                            className="bg-white h-4 lg:h-6 rounded-full transition-all duration-1000 ease-out shadow-lg"
                             style={{ width: `${Math.min(overallProgress, 100)}%` }}
                           ></div>
                         </div>
@@ -1184,8 +1417,8 @@ export default function CompoundInterestClub() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                    <CardHeader className="bg-gradient-to-r from-gray-900 to-black text-white rounded-t-lg">
+                  <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                    <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                       <CardTitle className="text-lg lg:text-xl">📈 Progreso Detallado por Vuelta</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 lg:p-6">
@@ -1198,12 +1431,12 @@ export default function CompoundInterestClub() {
                           return (
                             <div
                               key={round.round}
-                              className={`p-4 lg:p-6 border-2 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-102 ${
+                              className={`p-4 lg:p-6 border rounded-xl shadow-lg transition-all duration-300 ${
                                 isCompleted
-                                  ? "bg-gradient-to-r from-blue-100 to-blue-200 border-blue-400"
+                                  ? "bg-gray-800 border-gray-600"
                                   : isInProgress
-                                    ? "bg-gradient-to-r from-gray-100 to-slate-300 border-gray-500"
-                                    : "bg-gradient-to-r from-slate-100 to-gray-300 border-slate-400"
+                                    ? "bg-gray-800 border-gray-600"
+                                    : "bg-gray-800 border-gray-700"
                               }`}
                             >
                               <div className="flex items-center justify-between mb-4">
@@ -1211,45 +1444,41 @@ export default function CompoundInterestClub() {
                                   <div
                                     className={`w-10 h-10 lg:w-12 lg:h-12 rounded-full flex items-center justify-center font-bold text-base lg:text-lg shadow-lg ${
                                       isCompleted
-                                        ? "bg-gradient-to-r from-blue-600 to-blue-800 text-white"
+                                        ? "bg-white text-black"
                                         : isInProgress
-                                          ? "bg-gradient-to-r from-gray-600 to-slate-800 text-white"
-                                          : "bg-gradient-to-r from-slate-500 to-gray-700 text-white"
+                                          ? "bg-gray-700 text-white"
+                                          : "bg-gray-700 text-white"
                                     }`}
                                   >
                                     {isCompleted ? "✅" : round.round}
                                   </div>
                                   <div>
-                                    <h4 className="font-bold text-base lg:text-lg text-black">
+                                    <h4 className="font-bold text-base lg:text-lg text-white">
                                       🎯 Vuelta {round.round}
                                     </h4>
-                                    <p className="text-xs lg:text-sm text-gray-700 font-medium">💡 {round.idea}</p>
+                                    <p className="text-xs lg:text-sm text-gray-400 font-medium">💡 {round.idea}</p>
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <div className="font-bold text-lg lg:text-xl text-blue-700">
+                                  <div className="font-bold text-lg lg:text-xl text-white">
                                     ${round.goal.toFixed(2)}
                                   </div>
-                                  <div className="text-xs lg:text-sm text-gray-600 font-semibold">Meta</div>
+                                  <div className="text-xs lg:text-sm text-gray-400 font-semibold">Meta</div>
                                 </div>
                               </div>
 
                               <div className="flex items-center gap-4 mb-3">
                                 <div className="flex-1">
-                                  <div className="flex justify-between text-xs lg:text-sm text-gray-800 mb-2 font-semibold">
+                                  <div className="flex justify-between text-xs lg:text-sm text-gray-300 mb-2 font-semibold">
                                     <span>
                                       💵 ${round.current.toFixed(2)} de ${round.goal.toFixed(2)}
                                     </span>
                                     <span>{roundProgress.toFixed(1)}%</span>
                                   </div>
-                                  <div className="w-full bg-gray-400 rounded-full h-3 lg:h-4 shadow-inner">
+                                  <div className="w-full bg-gray-700 rounded-full h-3 lg:h-4 shadow-inner">
                                     <div
                                       className={`h-3 lg:h-4 rounded-full transition-all duration-500 shadow-lg ${
-                                        isCompleted
-                                          ? "bg-gradient-to-r from-blue-600 to-blue-800"
-                                          : isInProgress
-                                            ? "bg-gradient-to-r from-gray-600 to-slate-800"
-                                            : "bg-gradient-to-r from-slate-500 to-gray-700"
+                                        isCompleted ? "bg-white" : isInProgress ? "bg-gray-500" : "bg-gray-600"
                                       }`}
                                       style={{ width: `${Math.min(roundProgress, 100)}%` }}
                                     ></div>
@@ -1257,7 +1486,7 @@ export default function CompoundInterestClub() {
                                 </div>
                                 {round.missing > 0 && (
                                   <div className="text-right">
-                                    <div className="text-xs lg:text-sm font-bold text-red-600">
+                                    <div className="text-xs lg:text-sm font-bold text-red-400">
                                       ❌ Faltan: ${round.missing.toFixed(2)}
                                     </div>
                                   </div>
@@ -1265,7 +1494,7 @@ export default function CompoundInterestClub() {
                               </div>
 
                               {isCompleted && (
-                                <div className="flex items-center gap-2 text-blue-800 text-xs lg:text-sm font-bold bg-blue-200 p-2 rounded-lg">
+                                <div className="flex items-center gap-2 text-white text-xs lg:text-sm font-bold bg-gray-700 p-2 rounded-lg">
                                   <CheckCircle className="h-4 w-4 lg:h-5 lg:w-5" />🎉 ¡Vuelta completada! ¡Excelente
                                   trabajo!
                                 </div>
@@ -1278,17 +1507,17 @@ export default function CompoundInterestClub() {
                   </Card>
                 </>
               ) : (
-                <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-white to-gray-100">
+                <Card className="border border-gray-700 shadow-xl bg-gray-900">
                   <CardContent className="pt-6">
-                    <div className="text-center text-gray-700">
+                    <div className="text-center text-gray-400">
                       <TrendingUp className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg lg:text-xl font-bold mb-2">🚀 No hay plan activo</p>
-                      <p className="text-gray-600 text-sm lg:text-base">
+                      <p className="text-lg lg:text-xl font-bold mb-2 text-white">🚀 No hay plan activo</p>
+                      <p className="text-gray-400 text-sm lg:text-base">
                         Ve a la sección "Calculadora" para crear tu plan de inversión
                       </p>
                       <Button
                         onClick={() => setActiveSection("calculadora")}
-                        className="mt-4 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
+                        className="mt-4 bg-white text-black hover:bg-gray-200 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
                       >
                         ✨ Crear Plan
                       </Button>
@@ -1299,14 +1528,273 @@ export default function CompoundInterestClub() {
             </div>
           )}
 
+          {/* Ideas Section */}
+          {activeSection === "ideas" && (
+            <div className="space-y-4 lg:space-y-6">
+              {/* Ideas Predeterminadas del Sistema */}
+              <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
+                  <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
+                    <Lightbulb className="h-4 w-4 lg:h-5 lg:w-5" />💡 Ideas de Negocio Sugeridas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 lg:p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {businessIdeas.map((idea, index) => (
+                      <div
+                        key={index}
+                        className="p-4 lg:p-6 bg-gray-800 border border-gray-700 rounded-xl hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                      >
+                        <div className="flex items-center gap-3 lg:gap-4">
+                          <div className="w-10 h-10 lg:w-12 lg:h-12 bg-white text-black rounded-full flex items-center justify-center font-bold text-base lg:text-lg shadow-lg">
+                            {index + 1}
+                          </div>
+                          <span className="text-white font-bold text-sm lg:text-lg">{idea}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Área para Compartir Ideas de Usuarios */}
+              {isLoggedIn && (
+                <Card className="border border-blue-600 shadow-xl bg-gray-900">
+                  <CardHeader className="bg-blue-600 text-white rounded-t-lg border-b border-blue-600">
+                    <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
+                      <Plus className="h-4 w-4 lg:h-5 lg:w-5" />🚀 Comparte tu Idea de Negocio
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 lg:p-6">
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-white font-semibold mb-2 block text-sm lg:text-base">
+                          💭 ¿Tienes una idea de negocio? ¡Compártela con la comunidad!
+                        </Label>
+                        <Textarea
+                          value={newUserIdea}
+                          onChange={(e) => setNewUserIdea(e.target.value)}
+                          placeholder="Describe tu idea de negocio aquí... Por ejemplo: 'Vender postres caseros por WhatsApp' o 'Ofrecer servicios de limpieza los fines de semana'"
+                          className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 min-h-[100px] touch-target"
+                          rows={4}
+                        />
+                      </div>
+                      <Button
+                        onClick={shareUserIdea}
+                        disabled={!newUserIdea.trim()}
+                        className="w-full bg-white text-black hover:bg-gray-200 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />✨ Compartir Mi Idea
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Ideas Compartidas por la Comunidad */}
+              <Card className="border border-green-600 shadow-xl bg-gray-900">
+                <CardHeader className="bg-green-600 text-white rounded-t-lg border-b border-green-600">
+                  <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
+                    <Users className="h-4 w-4 lg:h-5 lg:w-5" />👥 Ideas Compartidas por la Comunidad ({userIdeas.length}
+                    )
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 lg:p-6">
+                  {userIdeas.length > 0 ? (
+                    <div className="space-y-4 max-h-96 overflow-y-auto mobile-scroll">
+                      {userIdeas.map((userIdea) => (
+                        <div
+                          key={userIdea.id}
+                          className="p-4 lg:p-6 bg-gray-800 border border-gray-700 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-white text-black rounded-full flex items-center justify-center font-bold shadow-lg">
+                                {userIdea.author.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-bold text-white text-sm lg:text-base">{userIdea.author}</div>
+                                <div className="text-xs text-gray-400">
+                                  {new Date(userIdea.timestamp).toLocaleDateString()} a las{" "}
+                                  {new Date(userIdea.timestamp).toLocaleTimeString()}
+                                </div>
+                              </div>
+                            </div>
+                            {(loggedInUser === userIdea.author || isAdmin) && (
+                              <Button
+                                onClick={() => deleteUserIdea(userIdea.id, userIdea.author)}
+                                size="sm"
+                                variant="destructive"
+                                className="opacity-70 hover:opacity-100 touch-target"
+                              >
+                                <Trash2 className="h-3 w-3 lg:h-4 lg:w-4" />
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="mb-4">
+                            <p className="text-white font-medium text-sm lg:text-lg leading-relaxed">
+                              💡 "{userIdea.idea}"
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <Button
+                              onClick={() => likeUserIdea(userIdea.id)}
+                              variant="outline"
+                              size="sm"
+                              className={`flex items-center gap-2 touch-target text-xs lg:text-sm ${
+                                isLoggedIn && userIdea.likedBy.includes(loggedInUser)
+                                  ? "bg-red-900 border-red-600 text-red-400 hover:bg-red-800"
+                                  : "bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700"
+                              }`}
+                              disabled={!isLoggedIn}
+                            >
+                              <Heart
+                                className={`h-3 w-3 lg:h-4 lg:w-4 ${
+                                  isLoggedIn && userIdea.likedBy.includes(loggedInUser)
+                                    ? "fill-red-500 text-red-500"
+                                    : ""
+                                }`}
+                              />
+                              {userIdea.likes} Me gusta
+                            </Button>
+
+                            {userIdea.likes > 0 && (
+                              <div className="text-xs text-gray-400">
+                                👥 {userIdea.likedBy.slice(0, 3).join(", ")}
+                                {userIdea.likedBy.length > 3 && ` y ${userIdea.likedBy.length - 3} más`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Lightbulb className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-gray-500" />
+                      <p className="text-lg lg:text-xl font-bold text-white mb-2">🌟 ¡Sé el primero!</p>
+                      <p className="text-gray-400 text-sm lg:text-base">
+                        Aún no hay ideas compartidas por la comunidad.
+                      </p>
+                      {!isLoggedIn && (
+                        <p className="text-xs lg:text-sm text-gray-500 mt-2">
+                          <Button
+                            onClick={() => setActiveSection("login")}
+                            variant="link"
+                            className="text-blue-400 hover:text-blue-300"
+                          >
+                            Inicia sesión
+                          </Button>
+                          para compartir tu primera idea.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Mensaje para usuarios no logueados */}
+              {!isLoggedIn && (
+                <Card className="border border-yellow-600 shadow-xl bg-gray-900">
+                  <CardContent className="p-4 lg:p-6">
+                    <div className="text-center">
+                      <User className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-yellow-500" />
+                      <p className="text-lg lg:text-xl font-bold text-white mb-2">🔐 Únete a la Comunidad</p>
+                      <p className="text-gray-400 mb-4 text-sm lg:text-base">
+                        Inicia sesión para compartir tus ideas de negocio y ver las ideas de otros miembros
+                      </p>
+                      <Button
+                        onClick={() => setActiveSection("login")}
+                        className="bg-white text-black hover:bg-gray-200 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
+                      >
+                        🚀 Iniciar Sesión
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Motivation Section */}
+          {activeSection === "motivacion" && (
+            <div className="space-y-4 lg:space-y-6">
+              <Card className="text-center border border-gray-700 shadow-xl bg-gray-900">
+                <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
+                  <CardTitle className="flex items-center justify-center gap-2 text-lg lg:text-xl">
+                    <Heart className="h-5 w-5 lg:h-6 lg:w-6" />💖 Frase de Motivación del Día
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-6 lg:py-8">
+                  <div className="max-w-2xl mx-auto">
+                    <div className="p-6 lg:p-8 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl">
+                      <div className="flex items-start gap-3 lg:gap-4">
+                        <Heart className="h-8 w-8 lg:h-10 lg:w-10 text-white mt-2 flex-shrink-0 animate-pulse" />
+                        <div className="flex-1">
+                          <p className="text-white font-bold italic text-lg lg:text-2xl leading-relaxed mb-4 lg:mb-6">
+                            "{currentQuote}"
+                          </p>
+                          <div className="text-xs lg:text-sm text-gray-400 mb-4 font-semibold">
+                            ✨ Frase {quoteIndex + 1} de {motivationalQuotes.length}
+                          </div>
+                          <Button
+                            onClick={getRandomQuote}
+                            className="bg-white text-black hover:bg-gray-200 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
+                          >
+                            <Heart className="h-3 w-3 lg:h-4 lg:w-4 mr-2" />🎲 Nueva Motivación
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
+                  <CardTitle className="text-center text-lg lg:text-xl">💡 Consejos Financieros</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 lg:p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 lg:p-6 bg-blue-900 border border-blue-700 rounded-xl shadow-lg">
+                      <h4 className="font-bold text-white mb-3 text-base lg:text-lg">🎯 Establece Metas Claras</h4>
+                      <p className="text-xs lg:text-sm text-gray-300 font-medium">
+                        Define objetivos específicos y fechas límite para tus inversiones.
+                      </p>
+                    </div>
+                    <div className="p-4 lg:p-6 bg-gray-800 border border-gray-700 rounded-xl shadow-lg">
+                      <h4 className="font-bold text-white mb-3 text-base lg:text-lg">📊 Diversifica tus Ingresos</h4>
+                      <p className="text-xs lg:text-sm text-gray-300 font-medium">
+                        No dependas de una sola fuente de ingresos, crea múltiples flujos.
+                      </p>
+                    </div>
+                    <div className="p-4 lg:p-6 bg-gray-800 border border-gray-700 rounded-xl shadow-lg">
+                      <h4 className="font-bold text-white mb-3 text-base lg:text-lg">💰 Reinvierte tus Ganancias</h4>
+                      <p className="text-xs lg:text-sm text-gray-300 font-medium">
+                        El poder del interés compuesto se maximiza reinvirtiendo las ganancias.
+                      </p>
+                    </div>
+                    <div className="p-4 lg:p-6 bg-blue-900 border border-blue-700 rounded-xl shadow-lg">
+                      <h4 className="font-bold text-white mb-3 text-base lg:text-lg">📚 Edúcate Constantemente</h4>
+                      <p className="text-xs lg:text-sm text-gray-300 font-medium">
+                        Invierte tiempo en aprender sobre finanzas e inversiones.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* Chat Section */}
           {activeSection === "chat" && (
             <div className="space-y-4 lg:space-y-6">
               {isLoggedIn ? (
                 <>
                   {/* Group Management */}
-                  <Card className="border-2 border-purple-500 shadow-xl bg-gradient-to-br from-purple-50 to-purple-100">
-                    <CardHeader className="bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-t-lg">
+                  <Card className="border border-purple-600 shadow-xl bg-gray-900">
+                    <CardHeader className="bg-purple-600 text-white rounded-t-lg border-b border-purple-600">
                       <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                         <Users className="h-4 w-4 lg:h-5 lg:w-5" />👥 Gestión de Grupos
                       </CardTitle>
@@ -1315,14 +1803,14 @@ export default function CompoundInterestClub() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <Button
                           onClick={() => setShowCreateGroup(true)}
-                          className="bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 touch-target"
+                          className="bg-green-600 hover:bg-green-700 touch-target"
                         >
                           <Plus className="h-4 w-4 mr-2" />
                           Crear Grupo
                         </Button>
                         <Button
                           onClick={() => setShowJoinGroup(true)}
-                          className="bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 touch-target"
+                          className="bg-blue-600 hover:bg-blue-700 touch-target"
                         >
                           <Hash className="h-4 w-4 mr-2" />
                           Unirse con Código
@@ -1331,7 +1819,7 @@ export default function CompoundInterestClub() {
                           <Button
                             onClick={() => copyGroupCode(currentGroupData.code)}
                             variant="outline"
-                            className="touch-target"
+                            className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 touch-target"
                           >
                             <Copy className="h-4 w-4 mr-2" />
                             Copiar Código
@@ -1341,22 +1829,22 @@ export default function CompoundInterestClub() {
 
                       {/* Create Group Modal */}
                       {showCreateGroup && (
-                        <div className="mb-4 p-4 bg-green-50 border-2 border-green-400 rounded-lg">
-                          <h4 className="font-bold text-green-900 mb-3">🆕 Crear Nuevo Grupo</h4>
+                        <div className="mb-4 p-4 bg-green-900 border border-green-600 rounded-lg">
+                          <h4 className="font-bold text-white mb-3">🆕 Crear Nuevo Grupo</h4>
                           <div className="space-y-3">
                             <Input
                               value={newGroupName}
                               onChange={(e) => setNewGroupName(e.target.value)}
                               placeholder="Nombre del grupo..."
-                              className="touch-target"
+                              className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
                             />
                             <div className="flex items-center gap-2">
                               <Checkbox
                                 checked={newGroupPrivate}
                                 onCheckedChange={(checked) => setNewGroupPrivate(checked as boolean)}
-                                className="touch-target"
+                                className="touch-target border-gray-600"
                               />
-                              <Label className="text-sm">Grupo privado</Label>
+                              <Label className="text-sm text-white">Grupo privado</Label>
                             </div>
                             <div className="flex gap-2">
                               <Button onClick={createGroup} className="bg-green-600 hover:bg-green-700 touch-target">
@@ -1365,7 +1853,7 @@ export default function CompoundInterestClub() {
                               <Button
                                 onClick={() => setShowCreateGroup(false)}
                                 variant="outline"
-                                className="touch-target"
+                                className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 touch-target"
                               >
                                 Cancelar
                               </Button>
@@ -1376,14 +1864,14 @@ export default function CompoundInterestClub() {
 
                       {/* Join Group Modal */}
                       {showJoinGroup && (
-                        <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-400 rounded-lg">
-                          <h4 className="font-bold text-blue-900 mb-3">🔗 Unirse a Grupo</h4>
+                        <div className="mb-4 p-4 bg-blue-900 border border-blue-600 rounded-lg">
+                          <h4 className="font-bold text-white mb-3">🔗 Unirse a Grupo</h4>
                           <div className="space-y-3">
                             <Input
                               value={joinGroupCode}
                               onChange={(e) => setJoinGroupCode(e.target.value)}
                               placeholder="Código del grupo (ej: ABC123)"
-                              className="touch-target"
+                              className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
                             />
                             <div className="flex gap-2">
                               <Button onClick={joinGroup} className="bg-blue-600 hover:bg-blue-700 touch-target">
@@ -1392,7 +1880,7 @@ export default function CompoundInterestClub() {
                               <Button
                                 onClick={() => setShowJoinGroup(false)}
                                 variant="outline"
-                                className="touch-target"
+                                className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 touch-target"
                               >
                                 Cancelar
                               </Button>
@@ -1403,23 +1891,23 @@ export default function CompoundInterestClub() {
 
                       {/* Groups List */}
                       <div className="space-y-2">
-                        <h4 className="font-bold text-purple-900 mb-2">📋 Mis Grupos:</h4>
+                        <h4 className="font-bold text-white mb-2">📋 Mis Grupos:</h4>
                         {chatGroups
                           .filter((group) => group.members.includes(loggedInUser))
                           .map((group) => (
                             <div
                               key={group.id}
-                              className={`p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                              className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
                                 currentGroup === group.id
-                                  ? "bg-purple-200 border-purple-500"
-                                  : "bg-white border-gray-300 hover:border-purple-400"
+                                  ? "bg-purple-900 border-purple-600"
+                                  : "bg-gray-800 border-gray-700 hover:border-purple-600"
                               }`}
                               onClick={() => setCurrentGroup(group.id)}
                             >
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <div className="font-semibold text-purple-900">{group.name}</div>
-                                  <div className="text-xs text-gray-600">
+                                  <div className="font-semibold text-white">{group.name}</div>
+                                  <div className="text-xs text-gray-400">
                                     Código: {group.code} | {group.members.length} miembros
                                     {group.isPrivate && " | 🔒 Privado"}
                                   </div>
@@ -1452,8 +1940,8 @@ export default function CompoundInterestClub() {
                   {/* Chat Interface */}
                   {currentGroupData ? (
                     <>
-                      <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                        <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
+                      <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                        <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                           <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                             <MessageCircle className="h-4 w-4 lg:h-5 lg:w-5" />💬 {currentGroupData.name}
                             <div className="ml-auto flex items-center gap-2">
@@ -1463,16 +1951,16 @@ export default function CompoundInterestClub() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-0">
-                          <div className="h-64 sm:h-80 lg:h-96 overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-gray-50 to-slate-100 mobile-scroll">
+                          <div className="h-64 sm:h-80 lg:h-96 overflow-y-auto p-4 space-y-3 bg-gray-800 mobile-scroll">
                             {currentGroupMessages.map((msg) => (
                               <div
                                 key={msg.id}
                                 className={`p-3 rounded-lg shadow-md text-sm lg:text-base ${
                                   msg.user === loggedInUser
-                                    ? "bg-gradient-to-r from-blue-600 to-blue-800 text-white ml-4 lg:ml-8"
+                                    ? "bg-white text-black ml-4 lg:ml-8"
                                     : msg.user.includes("Sistema")
-                                      ? "bg-gradient-to-r from-gray-700 to-black text-white text-center mx-2 lg:mx-4"
-                                      : "bg-white border-2 border-gray-400 mr-4 lg:mr-8"
+                                      ? "bg-gray-700 text-white text-center mx-2 lg:mx-4"
+                                      : "bg-gray-700 border border-gray-600 mr-4 lg:mr-8 text-white"
                                 }`}
                               >
                                 <div className="flex justify-between items-start">
@@ -1480,7 +1968,7 @@ export default function CompoundInterestClub() {
                                     {!msg.user.includes("Sistema") && (
                                       <div
                                         className={`text-xs font-bold mb-1 ${
-                                          msg.user === loggedInUser ? "text-blue-200" : "text-gray-600"
+                                          msg.user === loggedInUser ? "text-gray-600" : "text-gray-400"
                                         }`}
                                       >
                                         {msg.user === loggedInUser ? "Tú" : msg.user}
@@ -1489,10 +1977,10 @@ export default function CompoundInterestClub() {
                                     <div
                                       className={`${
                                         msg.user === loggedInUser
-                                          ? "text-white"
+                                          ? "text-black"
                                           : msg.user.includes("Sistema")
                                             ? "text-white font-bold"
-                                            : "text-gray-800"
+                                            : "text-white"
                                       }`}
                                     >
                                       {msg.message}
@@ -1501,10 +1989,10 @@ export default function CompoundInterestClub() {
                                   <div
                                     className={`text-xs ml-2 ${
                                       msg.user === loggedInUser
-                                        ? "text-blue-300"
+                                        ? "text-gray-500"
                                         : msg.user.includes("Sistema")
-                                          ? "text-gray-300"
-                                          : "text-gray-500"
+                                          ? "text-gray-400"
+                                          : "text-gray-400"
                                     }`}
                                   >
                                     {new Date(msg.timestamp).toLocaleTimeString()}
@@ -1514,18 +2002,18 @@ export default function CompoundInterestClub() {
                             ))}
                             <div ref={chatEndRef} />
                           </div>
-                          <div className="p-4 border-t-2 border-gray-400 bg-gradient-to-r from-gray-100 to-slate-200">
+                          <div className="p-4 border-t border-gray-700 bg-gray-800">
                             <div className="flex gap-2">
                               <Input
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 placeholder="Escribe tu mensaje..."
-                                className="flex-1 border-2 border-gray-400 focus:border-blue-600 touch-target"
+                                className="flex-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400 touch-target"
                                 onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                               />
                               <Button
                                 onClick={sendMessage}
-                                className="bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 shadow-lg touch-target"
+                                className="bg-white text-black hover:bg-gray-200 shadow-lg touch-target"
                               >
                                 <Send className="h-4 w-4" />
                               </Button>
@@ -1534,8 +2022,8 @@ export default function CompoundInterestClub() {
                         </CardContent>
                       </Card>
 
-                      <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                        <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
+                      <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                        <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                           <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                             <Users className="h-4 w-4 lg:h-5 lg:w-5" />👥 Miembros del Grupo (
                             {currentGroupData.members.length})
@@ -1546,16 +2034,16 @@ export default function CompoundInterestClub() {
                             {currentGroupData.members.map((member, index) => (
                               <div
                                 key={index}
-                                className="flex items-center gap-2 p-3 bg-gradient-to-r from-gray-100 to-slate-300 rounded-lg border-2 border-gray-400"
+                                className="flex items-center gap-2 p-3 bg-gray-800 rounded-lg border border-gray-700"
                               >
                                 <div
                                   className={`w-3 h-3 rounded-full ${
                                     currentGroupOnlineUsers.includes(member)
                                       ? "bg-green-500 animate-pulse"
-                                      : "bg-gray-400"
+                                      : "bg-gray-500"
                                   }`}
                                 ></div>
-                                <span className="font-semibold text-gray-800 text-sm lg:text-base">{member}</span>
+                                <span className="font-semibold text-white text-sm lg:text-base">{member}</span>
                                 {currentGroupData.createdBy === member && <Crown className="h-3 w-3 text-yellow-500" />}
                               </div>
                             ))}
@@ -1564,25 +2052,25 @@ export default function CompoundInterestClub() {
                       </Card>
                     </>
                   ) : (
-                    <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
+                    <Card className="border border-gray-700 shadow-xl bg-gray-900">
                       <CardContent className="pt-6">
-                        <div className="text-center text-gray-700">
+                        <div className="text-center text-gray-400">
                           <MessageCircle className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 opacity-50" />
-                          <p className="text-lg lg:text-xl font-bold mb-2">📱 No hay grupo seleccionado</p>
-                          <p className="text-gray-600 mb-4 text-sm lg:text-base">
+                          <p className="text-lg lg:text-xl font-bold mb-2 text-white">📱 No hay grupo seleccionado</p>
+                          <p className="text-gray-400 mb-4 text-sm lg:text-base">
                             Crea un grupo nuevo o únete a uno existente para empezar a chatear
                           </p>
                           <div className="flex gap-2 justify-center">
                             <Button
                               onClick={() => setShowCreateGroup(true)}
-                              className="bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 touch-target"
+                              className="bg-green-600 hover:bg-green-700 touch-target"
                             >
                               <Plus className="h-4 w-4 mr-2" />
                               Crear Grupo
                             </Button>
                             <Button
                               onClick={() => setShowJoinGroup(true)}
-                              className="bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 touch-target"
+                              className="bg-blue-600 hover:bg-blue-700 touch-target"
                             >
                               <Hash className="h-4 w-4 mr-2" />
                               Unirse
@@ -1594,17 +2082,17 @@ export default function CompoundInterestClub() {
                   )}
                 </>
               ) : (
-                <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
+                <Card className="border border-gray-700 shadow-xl bg-gray-900">
                   <CardContent className="pt-6">
-                    <div className="text-center text-gray-700">
+                    <div className="text-center text-gray-400">
                       <MessageCircle className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg lg:text-xl font-bold mb-2">🔒 Acceso Restringido</p>
-                      <p className="text-gray-600 mb-4 text-sm lg:text-base">
+                      <p className="text-lg lg:text-xl font-bold mb-2 text-white">🔒 Acceso Restringido</p>
+                      <p className="text-gray-400 mb-4 text-sm lg:text-base">
                         Debes iniciar sesión para acceder al chat grupal
                       </p>
                       <Button
                         onClick={() => setActiveSection("login")}
-                        className="bg-gradient-to-r from-gray-600 to-black hover:from-gray-700 hover:to-gray-900 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
+                        className="bg-white text-black hover:bg-gray-200 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
                       >
                         🚀 Iniciar Sesión
                       </Button>
@@ -1612,303 +2100,42 @@ export default function CompoundInterestClub() {
                   </CardContent>
                 </Card>
               )}
-            </div>
-          )}
-
-          {/* Ideas Section */}
-          {activeSection === "ideas" && (
-            <div className="space-y-4 lg:space-y-6">
-              {/* Ideas Predeterminadas del Sistema */}
-              <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
-                  <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
-                    <Lightbulb className="h-4 w-4 lg:h-5 lg:w-5" />💡 Ideas de Negocio Sugeridas
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 lg:p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {businessIdeas.map((idea, index) => (
-                      <div
-                        key={index}
-                        className="p-4 lg:p-6 bg-gradient-to-r from-gray-100 to-slate-300 border-2 border-gray-500 rounded-xl hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-                      >
-                        <div className="flex items-center gap-3 lg:gap-4">
-                          <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-full flex items-center justify-center font-bold text-base lg:text-lg shadow-lg">
-                            {index + 1}
-                          </div>
-                          <span className="text-gray-800 font-bold text-sm lg:text-lg">{idea}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Área para Compartir Ideas de Usuarios */}
-              {isLoggedIn && (
-                <Card className="border-2 border-blue-500 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100">
-                  <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-t-lg">
-                    <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
-                      <Plus className="h-4 w-4 lg:h-5 lg:w-5" />🚀 Comparte tu Idea de Negocio
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4 lg:p-6">
-                    <div className="space-y-4">
-                      <div>
-                        <Label className="text-blue-900 font-semibold mb-2 block text-sm lg:text-base">
-                          💭 ¿Tienes una idea de negocio? ¡Compártela con la comunidad!
-                        </Label>
-                        <Textarea
-                          value={newUserIdea}
-                          onChange={(e) => setNewUserIdea(e.target.value)}
-                          placeholder="Describe tu idea de negocio aquí... Por ejemplo: 'Vender postres caseros por WhatsApp' o 'Ofrecer servicios de limpieza los fines de semana'"
-                          className="border-2 border-blue-400 focus:border-blue-600 min-h-[100px] touch-target"
-                          rows={4}
-                        />
-                      </div>
-                      <Button
-                        onClick={shareUserIdea}
-                        disabled={!newUserIdea.trim()}
-                        className="w-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />✨ Compartir Mi Idea
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Ideas Compartidas por la Comunidad */}
-              <Card className="border-2 border-green-500 shadow-xl bg-gradient-to-br from-green-50 to-green-100">
-                <CardHeader className="bg-gradient-to-r from-green-600 to-green-800 text-white rounded-t-lg">
-                  <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
-                    <Users className="h-4 w-4 lg:h-5 lg:w-5" />👥 Ideas Compartidas por la Comunidad ({userIdeas.length}
-                    )
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 lg:p-6">
-                  {userIdeas.length > 0 ? (
-                    <div className="space-y-4 max-h-96 overflow-y-auto mobile-scroll">
-                      {userIdeas.map((userIdea) => (
-                        <div
-                          key={userIdea.id}
-                          className="p-4 lg:p-6 bg-white border-2 border-green-400 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
-                        >
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-r from-green-600 to-green-800 text-white rounded-full flex items-center justify-center font-bold shadow-lg">
-                                {userIdea.author.charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <div className="font-bold text-green-900 text-sm lg:text-base">{userIdea.author}</div>
-                                <div className="text-xs text-gray-600">
-                                  {new Date(userIdea.timestamp).toLocaleDateString()} a las{" "}
-                                  {new Date(userIdea.timestamp).toLocaleTimeString()}
-                                </div>
-                              </div>
-                            </div>
-                            {(loggedInUser === userIdea.author || isAdmin) && (
-                              <Button
-                                onClick={() => deleteUserIdea(userIdea.id, userIdea.author)}
-                                size="sm"
-                                variant="destructive"
-                                className="opacity-70 hover:opacity-100 touch-target"
-                              >
-                                <Trash2 className="h-3 w-3 lg:h-4 lg:w-4" />
-                              </Button>
-                            )}
-                          </div>
-
-                          <div className="mb-4">
-                            <p className="text-gray-800 font-medium text-sm lg:text-lg leading-relaxed">
-                              💡 "{userIdea.idea}"
-                            </p>
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <Button
-                              onClick={() => likeUserIdea(userIdea.id)}
-                              variant="outline"
-                              size="sm"
-                              className={`flex items-center gap-2 touch-target text-xs lg:text-sm ${
-                                isLoggedIn && userIdea.likedBy.includes(loggedInUser)
-                                  ? "bg-red-100 border-red-400 text-red-700 hover:bg-red-200"
-                                  : "hover:bg-gray-100"
-                              }`}
-                              disabled={!isLoggedIn}
-                            >
-                              <Heart
-                                className={`h-3 w-3 lg:h-4 lg:w-4 ${
-                                  isLoggedIn && userIdea.likedBy.includes(loggedInUser)
-                                    ? "fill-red-500 text-red-500"
-                                    : ""
-                                }`}
-                              />
-                              {userIdea.likes} Me gusta
-                            </Button>
-
-                            {userIdea.likes > 0 && (
-                              <div className="text-xs text-gray-600">
-                                👥 {userIdea.likedBy.slice(0, 3).join(", ")}
-                                {userIdea.likedBy.length > 3 && ` y ${userIdea.likedBy.length - 3} más`}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <Lightbulb className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-gray-400" />
-                      <p className="text-lg lg:text-xl font-bold text-gray-700 mb-2">🌟 ¡Sé el primero!</p>
-                      <p className="text-gray-600 text-sm lg:text-base">
-                        Aún no hay ideas compartidas por la comunidad.
-                      </p>
-                      {!isLoggedIn && (
-                        <p className="text-xs lg:text-sm text-gray-500 mt-2">
-                          <Button
-                            onClick={() => setActiveSection("login")}
-                            variant="link"
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            Inicia sesión
-                          </Button>
-                          para compartir tu primera idea.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Mensaje para usuarios no logueados */}
-              {!isLoggedIn && (
-                <Card className="border-2 border-yellow-500 shadow-xl bg-gradient-to-br from-yellow-50 to-orange-100">
-                  <CardContent className="p-4 lg:p-6">
-                    <div className="text-center">
-                      <User className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-yellow-600" />
-                      <p className="text-lg lg:text-xl font-bold text-yellow-800 mb-2">🔐 Únete a la Comunidad</p>
-                      <p className="text-yellow-700 mb-4 text-sm lg:text-base">
-                        Inicia sesión para compartir tus ideas de negocio y ver las ideas de otros miembros
-                      </p>
-                      <Button
-                        onClick={() => setActiveSection("login")}
-                        className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
-                      >
-                        🚀 Iniciar Sesión
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* Motivation Section */}
-          {activeSection === "motivacion" && (
-            <div className="space-y-4 lg:space-y-6">
-              <Card className="text-center border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
-                  <CardTitle className="flex items-center justify-center gap-2 text-lg lg:text-xl">
-                    <Heart className="h-5 w-5 lg:h-6 lg:w-6" />💖 Frase de Motivación del Día
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="py-6 lg:py-8">
-                  <div className="max-w-2xl mx-auto">
-                    <div className="p-6 lg:p-8 bg-gradient-to-r from-gray-100 to-slate-300 border-2 border-gray-500 rounded-xl shadow-2xl">
-                      <div className="flex items-start gap-3 lg:gap-4">
-                        <Heart className="h-8 w-8 lg:h-10 lg:w-10 text-blue-600 mt-2 flex-shrink-0 animate-pulse" />
-                        <div className="flex-1">
-                          <p className="text-gray-800 font-bold italic text-lg lg:text-2xl leading-relaxed mb-4 lg:mb-6">
-                            "{currentQuote}"
-                          </p>
-                          <div className="text-xs lg:text-sm text-gray-700 mb-4 font-semibold">
-                            ✨ Frase {quoteIndex + 1} de {motivationalQuotes.length}
-                          </div>
-                          <Button
-                            onClick={getRandomQuote}
-                            className="bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
-                          >
-                            <Heart className="h-3 w-3 lg:h-4 lg:w-4 mr-2" />🎲 Nueva Motivación
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
-                  <CardTitle className="text-center text-lg lg:text-xl">💡 Consejos Financieros</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 lg:p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 lg:p-6 bg-gradient-to-r from-blue-100 to-blue-200 border-2 border-blue-400 rounded-xl shadow-lg">
-                      <h4 className="font-bold text-blue-900 mb-3 text-base lg:text-lg">🎯 Establece Metas Claras</h4>
-                      <p className="text-xs lg:text-sm text-gray-800 font-medium">
-                        Define objetivos específicos y fechas límite para tus inversiones.
-                      </p>
-                    </div>
-                    <div className="p-4 lg:p-6 bg-gradient-to-r from-gray-100 to-slate-300 border-2 border-gray-500 rounded-xl shadow-lg">
-                      <h4 className="font-bold text-gray-900 mb-3 text-base lg:text-lg">📊 Diversifica tus Ingresos</h4>
-                      <p className="text-xs lg:text-sm text-gray-800 font-medium">
-                        No dependas de una sola fuente de ingresos, crea múltiples flujos.
-                      </p>
-                    </div>
-                    <div className="p-4 lg:p-6 bg-gradient-to-r from-slate-100 to-gray-300 border-2 border-slate-500 rounded-xl shadow-lg">
-                      <h4 className="font-bold text-slate-900 mb-3 text-base lg:text-lg">
-                        💰 Reinvierte tus Ganancias
-                      </h4>
-                      <p className="text-xs lg:text-sm text-gray-800 font-medium">
-                        El poder del interés compuesto se maximiza reinvirtiendo las ganancias.
-                      </p>
-                    </div>
-                    <div className="p-4 lg:p-6 bg-gradient-to-r from-blue-100 to-blue-300 border-2 border-blue-500 rounded-xl shadow-lg">
-                      <h4 className="font-bold text-blue-900 mb-3 text-base lg:text-lg">📚 Edúcate Constantemente</h4>
-                      <p className="text-xs lg:text-sm text-gray-800 font-medium">
-                        Invierte tiempo en aprender sobre finanzas e inversiones.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           )}
 
           {/* Admin Panel */}
           {activeSection === "admin" && isAdmin && (
             <div className="space-y-4 lg:space-y-6">
-              <Card className="border-2 border-yellow-400 shadow-xl bg-gradient-to-br from-white to-yellow-50">
-                <CardHeader className="bg-gradient-to-r from-yellow-600 to-orange-600 text-white rounded-t-lg">
+              <Card className="border border-yellow-600 shadow-xl bg-gray-900">
+                <CardHeader className="bg-yellow-600 text-black rounded-t-lg border-b border-yellow-600">
                   <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                     <Crown className="h-4 w-4 lg:h-5 lg:w-5" />👑 Panel de Administración
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 lg:p-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
-                    <div className="text-center p-4 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl border-2 border-blue-400">
-                      <Users className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 text-blue-700" />
-                      <div className="text-xl lg:text-2xl font-bold text-blue-800">{appUsers.length}</div>
-                      <div className="text-xs lg:text-sm text-blue-700">Usuarios Totales</div>
+                    <div className="text-center p-4 bg-blue-900 rounded-xl border border-blue-700">
+                      <Users className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 text-white" />
+                      <div className="text-xl lg:text-2xl font-bold text-white">{appUsers.length}</div>
+                      <div className="text-xs lg:text-sm text-gray-300">Usuarios Totales</div>
                     </div>
-                    <div className="text-center p-4 bg-gradient-to-br from-green-100 to-green-200 rounded-xl border-2 border-green-400">
-                      <Lightbulb className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 text-green-700" />
-                      <div className="text-xl lg:text-2xl font-bold text-green-800">{businessIdeas.length}</div>
-                      <div className="text-xs lg:text-sm text-green-700">Ideas de Negocio</div>
+                    <div className="text-center p-4 bg-green-900 rounded-xl border border-green-700">
+                      <Lightbulb className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 text-white" />
+                      <div className="text-xl lg:text-2xl font-bold text-white">{businessIdeas.length}</div>
+                      <div className="text-xs lg:text-sm text-gray-300">Ideas de Negocio</div>
                     </div>
-                    <div className="text-center p-4 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl border-2 border-purple-400">
-                      <Heart className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 text-purple-700" />
-                      <div className="text-xl lg:text-2xl font-bold text-purple-800">{motivationalQuotes.length}</div>
-                      <div className="text-xs lg:text-sm text-purple-700">Frases Motivacionales</div>
+                    <div className="text-center p-4 bg-purple-900 rounded-xl border border-purple-700">
+                      <Heart className="h-6 w-6 lg:h-8 lg:w-8 mx-auto mb-2 text-white" />
+                      <div className="text-xl lg:text-2xl font-bold text-white">{motivationalQuotes.length}</div>
+                      <div className="text-xs lg:text-sm text-gray-300">Frases Motivacionales</div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Manage Business Ideas */}
-              <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
+              <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                   <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                     <Lightbulb className="h-4 w-4 lg:h-5 lg:w-5" />
                     Gestionar Ideas de Negocio
@@ -1920,7 +2147,7 @@ export default function CompoundInterestClub() {
                       value={newIdeaText}
                       onChange={(e) => setNewIdeaText(e.target.value)}
                       placeholder="Nueva idea de negocio..."
-                      className="flex-1 touch-target"
+                      className="flex-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
                     />
                     <Button onClick={addBusinessIdea} className="bg-blue-600 hover:bg-blue-700 touch-target">
                       <Plus className="h-4 w-4 mr-2" />
@@ -1929,13 +2156,16 @@ export default function CompoundInterestClub() {
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto mobile-scroll">
                     {businessIdeas.map((idea, index) => (
-                      <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border">
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 p-3 bg-gray-800 rounded-lg border border-gray-700"
+                      >
                         {editingIdea === index ? (
                           <>
                             <Input
                               value={editIdeaText}
                               onChange={(e) => setEditIdeaText(e.target.value)}
-                              className="flex-1 touch-target"
+                              className="flex-1 bg-gray-700 border-gray-600 text-white touch-target"
                             />
                             <Button
                               onClick={saveEditIdea}
@@ -1948,19 +2178,19 @@ export default function CompoundInterestClub() {
                               onClick={() => setEditingIdea(null)}
                               size="sm"
                               variant="outline"
-                              className="touch-target"
+                              className="bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 touch-target"
                             >
                               <X className="h-4 w-4" />
                             </Button>
                           </>
                         ) : (
                           <>
-                            <span className="flex-1 text-xs lg:text-sm">{idea}</span>
+                            <span className="flex-1 text-xs lg:text-sm text-white">{idea}</span>
                             <Button
                               onClick={() => editBusinessIdea(index)}
                               size="sm"
                               variant="outline"
-                              className="touch-target"
+                              className="bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 touch-target"
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -1981,8 +2211,8 @@ export default function CompoundInterestClub() {
               </Card>
 
               {/* Manage Motivational Quotes */}
-              <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-white to-gray-100">
-                <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
+              <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                   <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                     <Heart className="h-4 w-4 lg:h-5 lg:w-5" />
                     Gestionar Frases Motivacionales
@@ -1994,7 +2224,7 @@ export default function CompoundInterestClub() {
                       value={newQuoteText}
                       onChange={(e) => setNewQuoteText(e.target.value)}
                       placeholder="Nueva frase motivacional..."
-                      className="flex-1 touch-target"
+                      className="flex-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
                       rows={2}
                     />
                     <Button onClick={addMotivationalQuote} className="bg-blue-600 hover:bg-blue-700 touch-target">
@@ -2004,13 +2234,16 @@ export default function CompoundInterestClub() {
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto mobile-scroll">
                     {motivationalQuotes.map((quote, index) => (
-                      <div key={index} className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg border">
+                      <div
+                        key={index}
+                        className="flex items-start gap-2 p-3 bg-gray-800 rounded-lg border border-gray-700"
+                      >
                         {editingQuote === index ? (
                           <>
                             <Textarea
                               value={editQuoteText}
                               onChange={(e) => setEditQuoteText(e.target.value)}
-                              className="flex-1 touch-target"
+                              className="flex-1 bg-gray-700 border-gray-600 text-white touch-target"
                               rows={2}
                             />
                             <div className="flex flex-col gap-1">
@@ -2025,7 +2258,7 @@ export default function CompoundInterestClub() {
                                 onClick={() => setEditingQuote(null)}
                                 size="sm"
                                 variant="outline"
-                                className="touch-target"
+                                className="bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 touch-target"
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -2033,13 +2266,13 @@ export default function CompoundInterestClub() {
                           </>
                         ) : (
                           <>
-                            <span className="flex-1 text-xs lg:text-sm italic">"{quote}"</span>
+                            <span className="flex-1 text-xs lg:text-sm italic text-white">"{quote}"</span>
                             <div className="flex flex-col gap-1">
                               <Button
                                 onClick={() => editMotivationalQuote(index)}
                                 size="sm"
                                 variant="outline"
-                                className="touch-target"
+                                className="bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 touch-target"
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
@@ -2062,43 +2295,40 @@ export default function CompoundInterestClub() {
 
               {/* Manage Users - SOLO SUPER ADMIN */}
               {isSuperAdmin && (
-                <Card className="border-2 border-yellow-400 shadow-xl bg-gradient-to-br from-yellow-50 to-orange-100">
-                  <CardHeader className="bg-gradient-to-r from-yellow-600 to-orange-600 text-white rounded-t-lg">
+                <Card className="border border-yellow-600 shadow-xl bg-gray-900">
+                  <CardHeader className="bg-yellow-600 text-black rounded-t-lg border-b border-yellow-600">
                     <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                       <Crown className="h-4 w-4 lg:h-5 lg:w-5" />👑 Gestionar Usuarios (SOLO SUPER ADMIN)
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 lg:p-6">
-                    <div className="mb-4 p-4 bg-gradient-to-r from-yellow-100 to-orange-200 border-2 border-yellow-400 rounded-lg">
-                      <p className="text-xs lg:text-sm font-bold text-yellow-800 mb-2">🔐 ACCESO EXCLUSIVO</p>
-                      <p className="text-xs text-yellow-700">Solo el Super Administrador puede crear nuevos usuarios</p>
+                    <div className="mb-4 p-4 bg-yellow-900 border border-yellow-600 rounded-lg">
+                      <p className="text-xs lg:text-sm font-bold text-white mb-2">🔐 ACCESO EXCLUSIVO</p>
+                      <p className="text-xs text-gray-300">Solo el Super Administrador puede crear nuevos usuarios</p>
                     </div>
                     <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-2">
                       <Input
                         value={newUsername}
                         onChange={(e) => setNewUsername(e.target.value)}
                         placeholder="Nombre de usuario"
-                        className="touch-target"
+                        className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
                       />
                       <Input
                         type="password"
                         value={newUserPassword}
                         onChange={(e) => setNewUserPassword(e.target.value)}
                         placeholder="Contraseña"
-                        className="touch-target"
+                        className="bg-gray-800 border-gray-600 text-white placeholder-gray-400 touch-target"
                       />
                       <div className="flex items-center gap-2">
                         <Checkbox
                           checked={newUserIsAdmin}
                           onCheckedChange={(checked) => setNewUserIsAdmin(checked as boolean)}
-                          className="touch-target"
+                          className="touch-target border-gray-600"
                         />
-                        <Label className="text-xs lg:text-sm">Admin</Label>
+                        <Label className="text-xs lg:text-sm text-white">Admin</Label>
                       </div>
-                      <Button
-                        onClick={addUser}
-                        className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 touch-target"
-                      >
+                      <Button onClick={addUser} className="bg-yellow-600 hover:bg-yellow-700 text-black touch-target">
                         <Plus className="h-4 w-4 mr-2" />
                         Crear Usuario
                       </Button>
@@ -2107,24 +2337,20 @@ export default function CompoundInterestClub() {
                       {appUsers.map((user, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-2 p-3 bg-white rounded-lg border-2 border-yellow-300"
+                          className="flex items-center gap-2 p-3 bg-gray-800 rounded-lg border border-gray-700"
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm lg:text-base">{user.username}</span>
+                              <span className="font-semibold text-sm lg:text-base text-white">{user.username}</span>
                               {user.isAdmin && <Crown className="h-3 w-3 lg:h-4 lg:w-4 text-yellow-500" />}
                               {user.username === "admin" && (
-                                <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs">
-                                  SUPER ADMIN
-                                </Badge>
+                                <Badge className="bg-yellow-500 text-black text-xs">SUPER ADMIN</Badge>
                               )}
                               {user.isAdmin && user.username !== "admin" && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Admin
-                                </Badge>
+                                <Badge className="bg-gray-700 text-white text-xs">Admin</Badge>
                               )}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-gray-400">
                               Creado: {new Date(user.createdAt).toLocaleDateString()}
                               {user.lastLogin && ` | Último acceso: ${new Date(user.lastLogin).toLocaleDateString()}`}
                             </div>
@@ -2148,21 +2374,21 @@ export default function CompoundInterestClub() {
 
               {/* Mensaje para admins normales */}
               {isAdmin && !isSuperAdmin && (
-                <Card className="border-2 border-gray-400 shadow-xl bg-gradient-to-br from-gray-100 to-slate-200">
-                  <CardHeader className="bg-gradient-to-r from-gray-600 to-slate-700 text-white rounded-t-lg">
+                <Card className="border border-gray-700 shadow-xl bg-gray-900">
+                  <CardHeader className="bg-gray-700 text-white rounded-t-lg border-b border-gray-700">
                     <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                       <Shield className="h-4 w-4 lg:h-5 lg:w-5" />🔒 Gestión de Usuarios Restringida
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 lg:p-6">
                     <div className="text-center">
-                      <Crown className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-gray-400" />
-                      <p className="text-base lg:text-lg font-bold text-gray-700 mb-2">Acceso Limitado</p>
-                      <p className="text-xs lg:text-sm text-gray-600">
+                      <Crown className="h-12 w-12 lg:h-16 lg:w-16 mx-auto mb-4 text-gray-500" />
+                      <p className="text-base lg:text-lg font-bold text-white mb-2">Acceso Limitado</p>
+                      <p className="text-xs lg:text-sm text-gray-400">
                         Solo el Super Administrador puede crear nuevos usuarios
                       </p>
-                      <div className="mt-4 p-3 bg-gray-200 rounded-lg">
-                        <p className="text-xs text-gray-700">
+                      <div className="mt-4 p-3 bg-gray-800 rounded-lg">
+                        <p className="text-xs text-gray-400">
                           <strong>Usuarios actuales:</strong> {appUsers.length}
                         </p>
                       </div>
@@ -2175,248 +2401,30 @@ export default function CompoundInterestClub() {
 
           {/* Login Section */}
           {activeSection === "login" && (
-            <Card className="border-2 border-gray-500 shadow-xl bg-gradient-to-br from-white to-gray-100">
-              <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
+            <Card className="border border-gray-700 shadow-xl bg-gray-900">
+              <CardHeader className="bg-black text-white rounded-t-lg border-b border-gray-700">
                 <CardTitle className="flex items-center gap-2 text-lg lg:text-xl">
                   <User className="h-4 w-4 lg:h-5 lg:w-5" />👤 Área de Usuario
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 lg:p-6">
-                {!isLoggedIn ? (
-                  <div className="max-w-md mx-auto space-y-4">
-                    {!showRegister ? (
-                      <>
-                        {/* Login Form */}
-                        <div>
-                          <Label htmlFor="username" className="text-gray-800 font-semibold text-sm lg:text-base">
-                            Usuario
-                          </Label>
-                          <Input
-                            id="username"
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            placeholder="Ingresa tu usuario"
-                            className="border-2 border-gray-400 focus:border-blue-600 touch-target"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="password" className="text-gray-800 font-semibold text-sm lg:text-base">
-                            Contraseña
-                          </Label>
-                          <div className="relative">
-                            <Input
-                              id="password"
-                              type={showPassword ? "text" : "password"}
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              placeholder="Ingresa tu contraseña"
-                              className="border-2 border-gray-400 focus:border-blue-600 touch-target pr-10"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                              onClick={() => setShowPassword(!showPassword)}
-                            >
-                              {showPassword ? (
-                                <EyeOff className="h-4 w-4 text-gray-400" />
-                              ) : (
-                                <Eye className="h-4 w-4 text-gray-400" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={handleLogin}
-                          className="w-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
-                        >
-                          🚀 Entrar
-                        </Button>
-                        <div className="text-center">
-                          <p className="text-sm text-gray-600 mb-2">¿No tienes cuenta?</p>
-                          <Button
-                            onClick={() => setShowRegister(true)}
-                            variant="outline"
-                            className="w-full border-2 border-green-500 text-green-700 hover:bg-green-50 touch-target"
-                          >
-                            <UserPlus className="h-4 w-4 mr-2" />
-                            Crear Cuenta Nueva
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {/* Register Form */}
-                        <div className="text-center mb-4">
-                          <h3 className="text-xl font-bold text-gray-800 mb-2">🆕 Crear Cuenta Nueva</h3>
-                          <p className="text-sm text-gray-600">Únete al Club de Interés Compuesto</p>
-                        </div>
-                        <div>
-                          <Label
-                            htmlFor="registerUsername"
-                            className="text-gray-800 font-semibold text-sm lg:text-base"
-                          >
-                            Nombre de Usuario
-                          </Label>
-                          <Input
-                            id="registerUsername"
-                            type="text"
-                            value={registerUsername}
-                            onChange={(e) => setRegisterUsername(e.target.value)}
-                            placeholder="Elige tu nombre de usuario"
-                            className="border-2 border-gray-400 focus:border-green-600 touch-target"
-                          />
-                        </div>
-                        <div>
-                          <Label
-                            htmlFor="registerPassword"
-                            className="text-gray-800 font-semibold text-sm lg:text-base"
-                          >
-                            Contraseña
-                          </Label>
-                          <div className="relative">
-                            <Input
-                              id="registerPassword"
-                              type={showPassword ? "text" : "password"}
-                              value={registerPassword}
-                              onChange={(e) => setRegisterPassword(e.target.value)}
-                              placeholder="Crea una contraseña"
-                              className="border-2 border-gray-400 focus:border-green-600 touch-target pr-10"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                              onClick={() => setShowPassword(!showPassword)}
-                            >
-                              {showPassword ? (
-                                <EyeOff className="h-4 w-4 text-gray-400" />
-                              ) : (
-                                <Eye className="h-4 w-4 text-gray-400" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <div>
-                          <Label htmlFor="confirmPassword" className="text-gray-800 font-semibold text-sm lg:text-base">
-                            Confirmar Contraseña
-                          </Label>
-                          <div className="relative">
-                            <Input
-                              id="confirmPassword"
-                              type={showConfirmPassword ? "text" : "password"}
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              placeholder="Confirma tu contraseña"
-                              className="border-2 border-gray-400 focus:border-green-600 touch-target pr-10"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            >
-                              {showConfirmPassword ? (
-                                <EyeOff className="h-4 w-4 text-gray-400" />
-                              ) : (
-                                <Eye className="h-4 w-4 text-gray-400" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={handleRegister}
-                          className="w-full bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 shadow-lg transform hover:scale-105 transition-all duration-200 touch-target"
-                        >
-                          <UserPlus className="h-4 w-4 mr-2" />🎉 Crear Mi Cuenta
-                        </Button>
-                        <div className="text-center">
-                          <Button
-                            onClick={() => setShowRegister(false)}
-                            variant="link"
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            ← Volver al Login
-                          </Button>
-                        </div>
-                      </>
-                    )}
-
-                    {(loginMessage || registerMessage) && (
-                      <Alert
-                        className={
-                          loginMessage.includes("Bienvenido") || registerMessage.includes("exitosamente")
-                            ? "border-blue-400 bg-gradient-to-r from-blue-100 to-blue-200"
-                            : "border-red-400 bg-gradient-to-r from-red-100 to-pink-200"
-                        }
-                      >
-                        <div className="flex items-center gap-2">
-                          {loginMessage.includes("Bienvenido") || registerMessage.includes("exitosamente") ? (
-                            <CheckCircle className="h-4 w-4 text-blue-700" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-red-600" />
-                          )}
-                          <AlertDescription
-                            className={
-                              loginMessage.includes("Bienvenido") || registerMessage.includes("exitosamente")
-                                ? "text-blue-900 font-semibold text-sm lg:text-base"
-                                : "text-red-800 font-semibold text-sm lg:text-base"
-                            }
-                          >
-                            {loginMessage || registerMessage}
-                          </AlertDescription>
-                        </div>
-                      </Alert>
-                    )}
-
-                    {!showRegister && (
-                      <div className="text-center text-xs lg:text-sm text-gray-700 mt-4 p-4 bg-gradient-to-r from-gray-200 to-slate-300 rounded-lg border-2 border-gray-500">
-                        <p className="font-bold mb-3 text-black">👥 Usuarios de prueba disponibles:</p>
-                        <div className="space-y-2">
-                          <p className="bg-gradient-to-r from-yellow-100 to-orange-200 p-2 rounded border-2 border-yellow-400">
-                            👑 <code className="bg-yellow-200 px-2 py-1 rounded font-bold">admin</code> /{" "}
-                            <code className="bg-yellow-200 px-2 py-1 rounded font-bold">superder!!2</code>
-                            <span className="text-xs text-yellow-700 ml-2">(SUPER ADMIN)</span>
-                          </p>
-                          <p className="bg-white p-2 rounded border">
-                            👤 <code className="bg-gray-200 px-2 py-1 rounded font-bold">jose</code> /{" "}
-                            <code className="bg-gray-200 px-2 py-1 rounded font-bold">clave1</code>
-                          </p>
-                          <p className="bg-white p-2 rounded border">
-                            👤 <code className="bg-gray-200 px-2 py-1 rounded font-bold">maria</code> /{" "}
-                            <code className="bg-gray-200 px-2 py-1 rounded font-bold">clave2</code>
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                <div className="text-center space-y-4">
+                  <div className="flex items-center justify-center gap-2 text-white">
+                    <CheckCircle className="h-8 w-8 lg:h-10 lg:w-10" />
+                    <h3 className="text-2xl lg:text-3xl font-bold">🎉 ¡Sesión Iniciada!</h3>
                   </div>
-                ) : (
-                  <div className="text-center space-y-4">
-                    <div className="flex items-center justify-center gap-2 text-blue-700">
-                      <CheckCircle className="h-8 w-8 lg:h-10 lg:w-10" />
-                      <h3 className="text-2xl lg:text-3xl font-bold">🎉 ¡Sesión Iniciada!</h3>
-                    </div>
-                    <p className="text-gray-800 text-base lg:text-lg font-semibold">
-                      Bienvenido de vuelta, {loggedInUser}
-                    </p>
-                    {isAdmin && <Badge className="bg-yellow-500 text-black">👑 Administrador</Badge>}
-                    <p className="text-xs lg:text-sm text-gray-700 font-medium">
-                      Tu progreso se guarda automáticamente
-                    </p>
-                    <Button
-                      onClick={handleLogout}
-                      variant="outline"
-                      className="border-2 border-gray-500 text-gray-700 hover:bg-gray-100 bg-transparent touch-target"
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Cerrar Sesión
-                    </Button>
-                  </div>
-                )}
+                  <p className="text-white text-base lg:text-lg font-semibold">Bienvenido de vuelta, {loggedInUser}</p>
+                  {isAdmin && <Badge className="bg-yellow-500 text-black">👑 Administrador</Badge>}
+                  <p className="text-xs lg:text-sm text-gray-400 font-medium">Tu progreso se guarda automáticamente</p>
+                  <Button
+                    onClick={handleLogout}
+                    variant="outline"
+                    className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500 touch-target"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Cerrar Sesión
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

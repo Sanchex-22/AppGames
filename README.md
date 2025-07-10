@@ -19,10 +19,10 @@ Este proyecto es una aplicación móvil construida con **Next.js** y **Capacitor
 
 1. Clona el repositorio:
 
-```bash
+\`\`\`bash
 git clone https://github.com/tu-usuario/tu-repo.git
 cd tu-repo
-```
+\`\`\`
 
 ## Instala dependencias:
 
