@@ -1,0 +1,9 @@
+{
+  "appId": "com.yourcompany.yourapp",
+  "appName": "apkcompuse",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

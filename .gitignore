@@ -1,0 +1,59 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Next.js
+.next/
+out/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Capacitor
+android/app/src/main/assets/public
+ios/App/App/public
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Logs
+logs
+*.log
+
+# Android build
+/android/.gradle
+/android/app/build
+/android/build
+/android/local.properties
+/android/.idea
+/android/captures
+
+# Keystore files (if generated)
+*.jks
+*.keystore
+
+# Others
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# Expo (if used)
+.expo/
+.expo-shared/
+
+# JetBrains
+*.ipr
+*.iws
+*.bak
+*.swp

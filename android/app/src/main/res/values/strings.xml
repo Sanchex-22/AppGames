@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">apkcompuse</string>
+    <string name="title_activity_main">apkcompuse</string>
+    <string name="package_name">com.yourcompany.yourapp</string>
+    <string name="custom_url_scheme">com.yourcompany.yourapp</string>
+</resources>
